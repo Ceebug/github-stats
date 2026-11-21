@@ -158,6 +158,7 @@ fn getBasicInfo(client: *HttpClient, arena: *std.heap.ArenaAllocator) !struct {
     user: []const u8,
     name: ?[]const u8,
     emails: [][]const u8,
+    organizations: [][]const u8,
 } {
     std.log.info("Getting contribution years...", .{});
     const response = try client.graphql(
@@ -165,6 +166,9 @@ fn getBasicInfo(client: *HttpClient, arena: *std.heap.ArenaAllocator) !struct {
         \\  viewer {
         \\    login
         \\    name
+        \\    organizations(first: 100) {
+        \\      nodes { login }
+        \\    }
         \\    contributionsCollection {
         \\      contributionYears
         \\    }
@@ -183,6 +187,7 @@ fn getBasicInfo(client: *HttpClient, arena: *std.heap.ArenaAllocator) !struct {
         struct { data: struct { viewer: struct {
             login: []const u8,
             name: ?[]const u8,
+            organizations: struct { nodes: [][]const u8 },
             contributionsCollection: struct {
                 contributionYears: []u32,
             },
@@ -228,6 +233,7 @@ fn getBasicInfo(client: *HttpClient, arena: *std.heap.ArenaAllocator) !struct {
         .user = parsed.login,
         .name = parsed.name,
         .emails = emails,
+        .organizations = parsed.organizations.nodes,
     };
 }
 
@@ -237,6 +243,7 @@ fn getReposByYear(
         arena: *std.heap.ArenaAllocator,
         client: *HttpClient,
         user: []const u8,
+        organizations: []const []const u8,
         result: *Statistics,
         seen: *std.StringHashMap(bool),
         repositories: *std.ArrayList(Repository),
@@ -261,6 +268,7 @@ fn getReposByYear(
         \\      commitContributionsByRepository(maxRepositories: 100) {
         \\        repository {
         \\          nameWithOwner
+        \\          owner { login }
         \\          stargazerCount
         \\          forkCount
         \\          isPrivate
@@ -317,6 +325,7 @@ fn getReposByYear(
                 commitContributionsByRepository: []struct {
                     repository: struct {
                         nameWithOwner: []const u8,
+                        owner: struct { login: []const u8 },
                         stargazerCount: u32,
                         forkCount: u32,
                         isPrivate: bool,
@@ -379,6 +388,19 @@ fn getReposByYear(
 
     for (stats.commitContributionsByRepository) |x| {
         const raw_repo = x.repository;
+        var owned = std.mem.eql(u8, raw_repo.owner.login, context.user);
+        if (!owned) {
+            for (context.organizations) |organization| {
+                if (std.mem.eql(u8, raw_repo.owner.login, organization)) {
+                    owned = true;
+                    break;
+                }
+            }
+        }
+        if (!owned) {
+            std.log.debug("Skipping {s} (not owned by user or their organizations)", .{raw_repo.nameWithOwner});
+            continue;
+        }
         if (context.seen.get(raw_repo.nameWithOwner) orelse false) {
             std.log.debug(
                 "Skipping {s} (seen)",
@@ -527,6 +549,7 @@ fn getRepos(
             .arena = arena,
             .client = client,
             .user = info.user,
+            .organizations = info.organizations,
             .result = &result,
             .seen = &seen,
             .repositories = &repositories,
