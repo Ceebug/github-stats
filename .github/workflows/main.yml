@@ -43,7 +43,7 @@ jobs:
         run: |
           # Always exclude this repository from its own statistics.
           if [[ -n "$EXCLUDE_REPOS" ]]; then
-            EXCLUDE_REPOS="${EXCLUDE_REPOS},Ceebug/github-stats"
+            EXCLUDE_REPOS="${EXCLUDE_REPOS},Ceebug/github-stats,Ceebug/Ceebug.is-a.dev"
           else
             EXCLUDE_REPOS="Ceebug/github-stats"
           fi
