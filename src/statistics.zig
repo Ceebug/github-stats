@@ -187,7 +187,7 @@ fn getBasicInfo(client: *HttpClient, arena: *std.heap.ArenaAllocator) !struct {
         struct { data: struct { viewer: struct {
             login: []const u8,
             name: ?[]const u8,
-            organizations: struct { nodes: [][]const u8 },
+            organizations: struct { nodes: []struct { login: []const u8 } },
             contributionsCollection: struct {
                 contributionYears: []u32,
             },
@@ -228,12 +228,20 @@ fn getBasicInfo(client: *HttpClient, arena: *std.heap.ArenaAllocator) !struct {
         );
     }
 
+    const organizations = try arena.allocator().alloc(
+        []const u8,
+        parsed.organizations.nodes.len,
+    );
+    for (parsed.organizations.nodes, organizations) |organization, *login| {
+        login.* = organization.login;
+    }
+
     return .{
         .years = parsed.contributionsCollection.contributionYears,
         .user = parsed.login,
         .name = parsed.name,
         .emails = emails,
-        .organizations = parsed.organizations.nodes,
+        .organizations = organizations,
     };
 }
 
